@@ -9,7 +9,16 @@ import (
 	"testing"
 )
 
+type Embedded struct {
+	EmbeddedVal string `form:"embedded"`
+}
+
+func (e *Embedded) String() string {
+	return "Embedded"
+}
+
 type Test struct {
+	Embedded
 	ID    string   `cookie:"test_id"`
 	CID   int      `cookie:"test_id_int"`
 	Query string   `query:"query"`
@@ -31,7 +40,7 @@ func TestParse1(t *testing.T) {
 	}))
 	defer server.Close()
 
-	testbody := `name=Jason%20Connell&age=46&checkbox=on&vals=t1&vals=t2&vals=t3&ivals=1&ivals=333&ivals=25`
+	testbody := `name=Jason%20Connell&age=46&checkbox=on&vals=t1&vals=t2&vals=t3&ivals=1&ivals=333&ivals=25&embedded=Embedded%20value`
 
 	b := bytes.NewBufferString(testbody)
 

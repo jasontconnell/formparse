@@ -12,11 +12,17 @@ func ParseForm[T any](req *http.Request) T {
 	var val *T = new(T)
 
 	req.ParseForm()
-
-	log.Println(req.URL)
-
 	tt := reflect.TypeOf(val).Elem()
-	tv := reflect.ValueOf(val).Elem()
+	setAllValues(req, val, tt)
+
+	return *val
+}
+
+func setAllValues(req *http.Request, instance interface{}, tt reflect.Type) {
+	tv := reflect.ValueOf(instance)
+	if tv.Kind() == reflect.Pointer {
+		tv = tv.Elem()
+	}
 
 	for i := 0; i < tt.NumField(); i++ {
 		fld := tv.Field(i)
@@ -24,6 +30,12 @@ func ParseForm[T any](req *http.Request) T {
 
 		if !fld.CanSet() {
 			continue
+		}
+
+		if fld.Kind() == reflect.Struct {
+			x := reflect.New(fld.Type()).Interface()
+			setAllValues(req, x, fld.Type())
+			fld.Set(reflect.ValueOf(x).Elem())
 		}
 
 		ctag := sfld.Tag.Get("cookie")
@@ -35,17 +47,13 @@ func ParseForm[T any](req *http.Request) T {
 				setValue(fld, c.Value)
 			}
 		} else if qtag != "" {
-			log.Println("qtag is", qtag, sfld.Name)
 			c := req.URL.Query().Get(qtag)
 			setValue(fld, c)
 		} else if ftag != "" {
 			c := req.Form[ftag]
-			log.Println("ftag is", ftag, sfld.Name, c)
 			setValues(fld, c)
 		}
 	}
-
-	return *val
 }
 
 func setValue(fld reflect.Value, val string) {
