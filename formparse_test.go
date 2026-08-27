@@ -29,14 +29,19 @@ type Test struct {
 	Ints  []int    `form:"ivals"`
 }
 
-func TestParse1(t *testing.T) {
+type TestArray struct {
+	Name string `form:"name"`
+	Age  int    `form:"age"`
+}
+
+func TestParse(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t := ParseForm[Test](r)
+		parsed := ParseForm[Test](r)
 
 		w.WriteHeader(http.StatusOK)
 		enc := json.NewEncoder(w)
-		enc.Encode(t)
+		enc.Encode(parsed)
 	}))
 	defer server.Close()
 
@@ -69,6 +74,41 @@ func TestParse1(t *testing.T) {
 		t.Fail()
 	}
 	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(string(body))
+}
+
+func TestParseArray(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parsed := ParseFormArray[TestArray](r)
+
+		w.WriteHeader(http.StatusOK)
+		enc := json.NewEncoder(w)
+		enc.Encode(parsed)
+	}))
+	defer server.Close()
+
+	testbody := `age_0=46&age_1=47&age_2=48&name_0=jason&name_1=thomas&name_2=erin`
+
+	b := bytes.NewBufferString(testbody)
+
+	req, err := http.NewRequest("POST", server.URL+"/some/path?query=qval", b)
+	if err != nil {
+		t.Log(err)
+		t.Fail()
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Log(err)
+		t.Fail()
+	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
