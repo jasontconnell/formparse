@@ -14,7 +14,7 @@ func ParseForm[T any](req *http.Request) T {
 
 	req.ParseForm()
 	tt := reflect.TypeOf(val).Elem()
-	setAllValues(req, val, tt, "")
+	setAllValues(req, val, tt, "", "")
 
 	return *val
 }
@@ -30,7 +30,7 @@ func ParseFormArray[T any](req *http.Request) []T {
 		suffix := fmt.Sprintf("_%d", i)
 		var t *T = new(T)
 		tt := reflect.TypeOf(t).Elem()
-		more = setAllValues(req, t, tt, suffix)
+		more = setAllValues(req, t, tt, "", suffix)
 		if more {
 			list = append(list, *t)
 			i++
@@ -40,7 +40,18 @@ func ParseFormArray[T any](req *http.Request) []T {
 	return list
 }
 
-func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, suffix string) bool {
+func setArrayValues(req *http.Request, instance interface{}, tt reflect.Type, prefix string) bool {
+	more := true
+	i := 0
+	for more {
+		suffix := fmt.Sprintf("_%d", i)
+		t := reflect.New(tt)
+		more = setAllValues(req, t, tt, prefix, suffix)
+	}
+	return false
+}
+
+func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, prefix, suffix string) bool {
 	hasMore := true
 	tv := reflect.ValueOf(instance)
 	if tv.Kind() == reflect.Pointer {
@@ -55,28 +66,35 @@ func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, suff
 			continue
 		}
 
+		ftag := sfld.Tag.Get("form")
+
 		if fld.Kind() == reflect.Struct {
 			x := reflect.New(fld.Type()).Interface()
-			setAllValues(req, x, fld.Type(), suffix)
+			setAllValues(req, x, fld.Type(), prefix, suffix)
+			fld.Set(reflect.ValueOf(x).Elem())
+			continue
+		} else if fld.Kind() == reflect.Slice && fld.Type().Elem().Kind() == reflect.Struct {
+			log.Println(sfld.Name, fld.Type().Kind(), fld.Type().Elem().Kind())
+			x := reflect.New(fld.Type()).Interface()
+			setArrayValues(req, x, fld.Type(), ftag+"_")
 			fld.Set(reflect.ValueOf(x).Elem())
 			continue
 		}
 
 		ctag := sfld.Tag.Get("cookie")
 		qtag := sfld.Tag.Get("query")
-		ftag := sfld.Tag.Get("form")
 		if ctag != "" {
-			c, err := req.Cookie(ctag + suffix)
+			c, err := req.Cookie(prefix + ctag + suffix)
 			if err == nil {
 				setValue(fld, c.Value)
 				hasMore = c != nil && len(c.Value) > 0
 			}
 		} else if qtag != "" {
-			c := req.URL.Query().Get(qtag + suffix)
+			c := req.URL.Query().Get(prefix + qtag + suffix)
 			setValue(fld, c)
 			hasMore = len(c) > 0
 		} else if ftag != "" {
-			c := req.Form[ftag+suffix]
+			c := req.Form[prefix+ftag+suffix]
 			setValues(fld, c)
 			hasMore = len(c) > 0
 		}
