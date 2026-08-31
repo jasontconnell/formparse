@@ -20,7 +20,11 @@ func ParseForm[T any](req *http.Request) T {
 }
 
 func ParseFormArray[T any](req *http.Request) []T {
-	var list []T
+	var item T
+	etype := reflect.TypeOf(item).Elem()
+	atype := reflect.ArrayOf(0, etype)
+
+	list := reflect.New(atype).Elem()
 
 	req.ParseForm()
 	i := 0
@@ -29,25 +33,39 @@ func ParseFormArray[T any](req *http.Request) []T {
 	for more {
 		suffix := fmt.Sprintf("_%d", i)
 		var t *T = new(T)
-		tt := reflect.TypeOf(t).Elem()
-		more = setAllValues(req, t, tt, "", suffix)
+		item := reflect.ValueOf(t).Elem()
+
+		more = setAllValues(req, t, etype, "", suffix)
 		if more {
-			list = append(list, *t)
+			list = reflect.Append(list, item)
 			i++
 		}
 	}
 
-	return list
+	array := list.Interface().([]T)
+	return array
 }
 
+// instance should be a pointer to slice
 func setArrayValues(req *http.Request, instance interface{}, tt reflect.Type, prefix string) bool {
 	more := true
 	i := 0
+	valueInstance := reflect.ValueOf(instance).Elem()
+
+	log.Println("setting array values for type", tt.Name())
+
 	for more {
 		suffix := fmt.Sprintf("_%d", i)
 		t := reflect.New(tt)
 		more = setAllValues(req, t, tt, prefix, suffix)
+
+		if more {
+			valueInstance = reflect.Append(valueInstance, t)
+		}
 	}
+
+	log.Println("value", instance, valueInstance)
+
 	return false
 }
 
@@ -62,27 +80,31 @@ func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, pref
 		fld := tv.Field(i)
 		sfld := tt.Field(i)
 
+		log.Println(sfld.Name)
+
 		if !fld.CanSet() {
 			continue
 		}
 
 		ftag := sfld.Tag.Get("form")
+		ctag := sfld.Tag.Get("cookie")
+		qtag := sfld.Tag.Get("query")
 
 		if fld.Kind() == reflect.Struct {
+			log.Println("setting struct", sfld.Name)
 			x := reflect.New(fld.Type()).Interface()
 			setAllValues(req, x, fld.Type(), prefix, suffix)
 			fld.Set(reflect.ValueOf(x).Elem())
 			continue
 		} else if fld.Kind() == reflect.Slice && fld.Type().Elem().Kind() == reflect.Struct {
 			log.Println(sfld.Name, fld.Type().Kind(), fld.Type().Elem().Kind())
-			x := reflect.New(fld.Type()).Interface()
-			setArrayValues(req, x, fld.Type(), ftag+"_")
-			fld.Set(reflect.ValueOf(x).Elem())
+			list := reflect.New(reflect.ArrayOf(0, fld.Type())).Interface()
+			setArrayValues(req, list, fld.Type().Elem(), ftag+"_")
+			log.Println("set array values, got", list, "setting value on", sfld.Name)
+			fld.Set(reflect.ValueOf(list).Elem())
 			continue
 		}
 
-		ctag := sfld.Tag.Get("cookie")
-		qtag := sfld.Tag.Get("query")
 		if ctag != "" {
 			c, err := req.Cookie(prefix + ctag + suffix)
 			if err == nil {
