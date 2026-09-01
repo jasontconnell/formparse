@@ -20,8 +20,8 @@ func ParseForm[T any](req *http.Request) T {
 }
 
 func ParseFormArray[T any](req *http.Request) []T {
-	var item T
-	etype := reflect.TypeOf(item).Elem()
+	var val *T = new(T)
+	etype := reflect.TypeOf(val).Elem()
 	atype := reflect.SliceOf(etype)
 
 	list := reflect.New(atype).Elem()
@@ -52,28 +52,23 @@ func setArrayValues(req *http.Request, instance interface{}, tt reflect.Type, pr
 	i := 0
 	valueInstance := reflect.ValueOf(instance).Elem()
 
-	log.Println("setting array values for type", tt.Name(), instance, tt, prefix, valueInstance)
-
 	for more {
 		suffix := fmt.Sprintf("_%d", i)
 		t := reflect.New(tt).Interface()
-		log.Println("setting element of type", tt.Name(), t)
 		more = setAllValues(req, t, tt, prefix, suffix)
+		val := reflect.ValueOf(t)
 
 		if more {
-			log.Println("appending", t, valueInstance)
-			valueInstance = reflect.Append(valueInstance, reflect.ValueOf(t).Elem())
-			log.Println("end appending")
+			ns := reflect.Append(valueInstance, val.Elem())
+			valueInstance.Set(ns)
 		}
+		i++
 	}
-
-	log.Println("value", instance, valueInstance)
 
 	return false
 }
 
 func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, prefix, suffix string) bool {
-	log.Println("setAllValues", instance, tt, prefix, suffix)
 	hasMore := true
 	tv := reflect.ValueOf(instance)
 	if tv.Kind() == reflect.Pointer {
@@ -84,10 +79,7 @@ func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, pref
 		fld := tv.Field(i)
 		sfld := tt.Field(i)
 
-		log.Println(sfld.Name, tt)
-
 		if !fld.CanSet() {
-			log.Println("can't set", sfld.Name)
 			continue
 		}
 
@@ -96,17 +88,14 @@ func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, pref
 		qtag := sfld.Tag.Get("query")
 
 		if fld.Kind() == reflect.Struct {
-			log.Println("setting struct", sfld.Name)
 			x := reflect.New(fld.Type()).Interface()
 			setAllValues(req, x, fld.Type(), prefix, suffix)
 			fld.Set(reflect.ValueOf(x).Elem())
 			continue
 		} else if fld.Kind() == reflect.Slice && fld.Type().Elem().Kind() == reflect.Struct {
-			log.Println(sfld.Name, fld.Type().Kind(), fld.Type().Elem().Kind())
-			list := reflect.New(reflect.SliceOf(fld.Type())).Interface()
+			list := reflect.New(reflect.SliceOf(fld.Type().Elem())).Interface()
 			setArrayValues(req, list, fld.Type().Elem(), ftag+"_")
-			log.Println("set array values, got", list, "setting value on", sfld.Name)
-			fld.Set(reflect.ValueOf(list))
+			fld.Set(reflect.ValueOf(list).Elem())
 			continue
 		}
 
@@ -125,8 +114,6 @@ func setAllValues(req *http.Request, instance interface{}, tt reflect.Type, pref
 			setValues(fld, c)
 			hasMore = len(c) > 0
 		}
-
-		log.Println("instance after set", instance)
 	}
 	return hasMore
 }
