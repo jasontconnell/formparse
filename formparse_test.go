@@ -19,14 +19,20 @@ func (e *Embedded) String() string {
 
 type Test struct {
 	Embedded
-	ID    string   `cookie:"test_id"`
-	CID   int      `cookie:"test_id_int"`
-	Query string   `query:"query"`
-	Name  string   `form:"name"`
-	Age   int      `form:"age"`
-	Vals  []string `form:"vals"`
-	Check bool     `form:"checkbox"`
-	Ints  []int    `form:"ivals"`
+	ID        string         `cookie:"test_id"`
+	CID       int            `cookie:"test_id_int"`
+	Query     string         `query:"query"`
+	Name      string         `form:"name"`
+	Age       int            `form:"age"`
+	Vals      []string       `form:"vals"`
+	Check     bool           `form:"checkbox"`
+	Ints      []int          `form:"ivals"`
+	Internals []TestInternal `form:"internals"`
+}
+
+type TestInternal struct {
+	String string `form:"string"`
+	Int    int    `form:"int"`
 }
 
 type TestArray struct {
@@ -45,7 +51,7 @@ func TestParse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	testbody := `name=Jason%20Connell&age=46&checkbox=on&vals=t1&vals=t2&vals=t3&ivals=1&ivals=333&ivals=25&embedded=Embedded%20value`
+	testbody := `name=Jason%20Connell&age=46&checkbox=on&vals=t1&vals=t2&vals=t3&ivals=1&ivals=333&ivals=25&embedded=Embedded%20value&internals_string_0=jason&internals_int_0=4&internals_string_1=test&internals_int_1=11`
 
 	b := bytes.NewBufferString(testbody)
 
@@ -93,7 +99,7 @@ func TestParseArray(t *testing.T) {
 	}))
 	defer server.Close()
 
-	testbody := `age_0=46&age_1=47&age_2=48&name_0=jason&name_1=thomas&name_2=erin`
+	testbody := `age_0=46&age_1=47&age_2=44&name_0=jason&name_1=thomas&name_2=erin`
 
 	b := bytes.NewBufferString(testbody)
 
